@@ -3,7 +3,7 @@ import json
 import os
 import random
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 with open('.env') as f:
     for line in f:
@@ -232,14 +232,16 @@ for attempt in range(max_attempts):
 print("\n生成された投稿：")
 sys.stdout.buffer.write((final_post + "\n").encode('utf-8'))
 
-posts = []
+# 保存処理（2週間以上前のデータを削除するロジックを追加）
+posts_data = []
 try:
     with open('posts.json', 'r', encoding='utf-8') as f:
-        posts = json.load(f)
+        posts_data = json.load(f)
 except:
     pass
 
-posts.append({
+# 新しい投稿を追加
+posts_data.append({
     "text": final_post,
     "pattern": pattern,
     "opening_pattern": opening_pattern,
@@ -248,7 +250,16 @@ posts.append({
     "posted": False
 })
 
-with open('posts.json', 'w', encoding='utf-8') as f:
-    json.dump(posts, f, ensure_ascii=False, indent=2)
+# 現在から14日（2週間）前の日時を取得
+two_weeks_ago = datetime.now() - timedelta(days=14)
 
-print("posts.jsonに保存しました！")
+# 2週間以内のデータのみを抽出してリストを更新
+posts_data = [
+    p for p in posts_data 
+    if datetime.fromisoformat(p["created_at"]) > two_weeks_ago
+]
+
+with open('posts.json', 'w', encoding='utf-8') as f:
+    json.dump(posts_data, f, ensure_ascii=False, indent=2)
+
+print("2週間以上前のデータを整理し、posts.jsonに保存しました！")
