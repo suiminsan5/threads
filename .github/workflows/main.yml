@@ -42,4 +42,4 @@ jobs:
           git config --local user.name "GitHub Action"
           git add posts.json
           git commit -m "Update posts.json [skip ci]" || exit 0
-          git push
+          git push origin master --force
