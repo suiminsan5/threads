@@ -1,15 +1,28 @@
 import requests
 import json
 import os
+import sys # sysを追加
 from datetime import datetime
 
-# APIキーを読み込む
-with open('.env') as f:
-    for line in f:
-        key, value = line.strip().split('=', 1)
-        os.environ[key] = value
+# --- ここから修正：シークレット(Threadsトークン)対応 ---
+TOKEN = os.environ.get('THREADS_TOKEN')
 
-TOKEN = os.environ['THREADS_TOKEN']
+if not TOKEN:
+    # ローカル（自分のPC）用の予備
+    try:
+        with open('.env') as f:
+            for line in f:
+                if '=' in line:
+                    key, value = line.strip().split('=', 1)
+                    os.environ[key] = value
+        TOKEN = os.environ.get('THREADS_TOKEN')
+    except FileNotFoundError:
+        pass
+
+if not TOKEN:
+    print("THREADS_TOKENが設定されていません。")
+    sys.exit(1)
+# --- 修正ここまで ---
 
 def get_user_id():
     url = "https://graph.threads.net/v1.0/me"

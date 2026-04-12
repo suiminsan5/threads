@@ -1,15 +1,28 @@
 import requests
 import json
 import os
-from datetime import datetime
+import sys # sysを追加
 
-# APIキーを読み込む
-with open('.env') as f:
-    for line in f:
-        key, value = line.strip().split('=', 1)
-        os.environ[key] = value
+# --- ここから修正：シークレット(YouTube APIキー)対応 ---
+YOUTUBE_API_KEY = os.environ.get('YOUTUBE_API_KEY')
 
-YOUTUBE_API_KEY = os.environ['YOUTUBE_API_KEY']
+if not YOUTUBE_API_KEY:
+    try:
+        # ローカル（自分のPC）でのテスト用
+        with open('.env') as f:
+            for line in f:
+                if '=' in line:
+                    key, value = line.strip().split('=', 1)
+                    os.environ[key] = value
+        YOUTUBE_API_KEY = os.environ.get('YOUTUBE_API_KEY')
+    except FileNotFoundError:
+        # GitHub Actions上ではここを通る（エラーにせず続行）
+        pass
+
+if not YOUTUBE_API_KEY:
+    print("エラー：YOUTUBE_API_KEYが設定されていません。")
+    sys.exit(1)
+# --- 修正ここまで ---
 
 # 検索キーワード一覧
 KEYWORDS = [

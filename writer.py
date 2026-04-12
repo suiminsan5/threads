@@ -5,12 +5,28 @@ import random
 import sys
 from datetime import datetime, timedelta
 
-with open('.env') as f:
-    for line in f:
-        key, value = line.strip().split('=', 1)
-        os.environ[key] = value
+# --- ここから修正：.env読み込みをシークレット対応に変更 ---
+api_key = os.environ.get('CLAUDE_API_KEY')
 
-client = anthropic.Anthropic(api_key=os.environ['CLAUDE_API_KEY'])
+if not api_key:
+    # ローカル（自分のPC）で動かす時のための予備
+    try:
+        with open('.env') as f:
+            for line in f:
+                if '=' in line:
+                    key, value = line.strip().split('=', 1)
+                    os.environ[key] = value
+        api_key = os.environ.get('CLAUDE_API_KEY')
+    except FileNotFoundError:
+        # GitHub Actions上ではここを通ります（.envがなくてもエラーにしない）
+        pass
+
+if not api_key:
+    print("APIキーが設定されていません。")
+    sys.exit(1)
+
+client = anthropic.Anthropic(api_key=api_key)
+# --- ここまで修正 ---
 
 PATTERNS = [
     "短文完結・暴露系",
@@ -230,7 +246,8 @@ for attempt in range(max_attempts):
         sys.exit(0)
 
 print("\n生成された投稿：")
-sys.stdout.buffer.write((final_post + "\n").encode('utf-8'))
+# 文字化け対策（Actionsログ用）
+print(final_post)
 
 # 保存処理（2週間以上前のデータを削除するロジックを追加）
 posts_data = []

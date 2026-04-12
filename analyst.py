@@ -2,14 +2,29 @@ import anthropic
 import json
 import os
 from datetime import datetime
+import sys # sysを追加
 
-# APIキーを読み込む
-with open('.env') as f:
-    for line in f:
-        key, value = line.strip().split('=', 1)
-        os.environ[key] = value
+# --- ここから修正：シークレットと.envの両方に対応 ---
+api_key = os.environ.get('CLAUDE_API_KEY')
 
-client = anthropic.Anthropic(api_key=os.environ['CLAUDE_API_KEY'])
+if not api_key:
+    try:
+        with open('.env') as f:
+            for line in f:
+                if '=' in line:
+                    key, value = line.strip().split('=', 1)
+                    os.environ[key] = value
+        api_key = os.environ.get('CLAUDE_API_KEY')
+    except FileNotFoundError:
+        # GitHub Actions上ではここを通ります
+        pass
+
+if not api_key:
+    print("APIキーが設定されていません。")
+    sys.exit(1)
+
+client = anthropic.Anthropic(api_key=api_key)
+# --- ここまで修正 ---
 
 def analyze_posts():
     # メトリクスがある投稿だけ取得
