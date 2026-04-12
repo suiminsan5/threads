@@ -123,6 +123,7 @@ def generate_post(pattern, opening_pattern, first_line, topic, past_posts):
     prompt += "- 自然な日本語でAIっぽくない表現にする\n"
     prompt += "- !や?は全角（！や？）を使う\n"
     prompt += "- 🍀などの絵文字は使わない\n"
+    prompt += "- 「面接で非現実的な事を聞く」「怒号がある、お局が居るか聞く」といった、現実的に不可能なことや、応募者の印象を下げるようなNG行動は絶対に提案しないこと\n"
     prompt += past_text + "\n"
     prompt += "投稿文だけを出力してください。"
 
