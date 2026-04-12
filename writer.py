@@ -25,6 +25,9 @@ if not api_key:
 
 client = anthropic.Anthropic(api_key=api_key)
 
+# モデル名を指定通りに固定
+MODEL_NAME = "claude-sonnet-4-6"
+
 # --- 定数定義 ---
 PATTERNS = [
     "短文完結・暴露系", "短文完結・需要確認型", "短文完結・共感型",
@@ -70,7 +73,6 @@ FIRST_LINE_TOPIC_PAIRS = [
     ("『 これ言ってる職場、逃げてOK 』", "職場にいる要注意人物の特徴と対処法。高圧的な人・フレネミー・お局など1つ取り上げる"),
 ]
 
-# --- 履歴取得関数 ---
 def get_recent_data():
     try:
         with open('posts.json', 'r', encoding='utf-8') as f:
@@ -86,7 +88,6 @@ def get_recent_data():
 def is_list_pattern(pattern):
     return "リスト系" in pattern
 
-# --- 生成関数 ---
 def generate_post(pattern, opening_pattern, first_line, topic, past_posts):
     past_text = ""
     if past_posts:
@@ -108,7 +109,7 @@ def generate_post(pattern, opening_pattern, first_line, topic, past_posts):
     prompt = "以下の条件でThreadsの投稿文を1つ作成してください。\n\n"
     prompt += "【投稿パターン】" + pattern + "\n"
     prompt += "【冒頭パターン】" + opening_pattern + "\n"
-    prompt += "【1行目】必ず以下の書き出しで始めること（この文字列をそのまま1行目に使うこと）：" + first_line + "\n"
+    prompt += "【1行目】必ず以下の書き出しで始めること：" + first_line + "\n"
     prompt += "【トピック】" + topic + "\n"
     prompt += "【重要】1行目のタイトルと投稿内容を必ず一致させること\n\n"
     prompt += "条件：\n"
@@ -119,13 +120,14 @@ def generate_post(pattern, opening_pattern, first_line, topic, past_posts):
     prompt += "- 語尾の連続がないか確認すること\n"
     prompt += "- 最後にハッシュタグを必ず3つ、全て#から始めること\n"
     prompt += "- *や**のようなマークダウン記法は絶対に使わない\n"
-    prompt += "- 自然な日本語でAIっぽくない表現にする（！や？は全角）\n"
+    prompt += "- 自然な日本語でAIっぽくない表現にする\n"
+    prompt += "- !や?は全角（！や？）を使う\n"
     prompt += "- 🍀などの絵文字は使わない\n"
     prompt += past_text + "\n"
     prompt += "投稿文だけを出力してください。"
 
     message = client.messages.create(
-        model="claude-3-5-sonnet-20240620",
+        model=MODEL_NAME,
         max_tokens=2048,
         messages=[{"role": "user", "content": prompt}]
     )
@@ -134,7 +136,7 @@ def generate_post(pattern, opening_pattern, first_line, topic, past_posts):
 def score_post(post, first_line):
     prompt = f"以下のThreads投稿を採点してください。\n\n1行目：{first_line}\n投稿文：\n{post}\n\n平均点:X.X の形式で出力してください。"
     message = client.messages.create(
-        model="claude-3-5-sonnet-20240620",
+        model=MODEL_NAME,
         max_tokens=100,
         messages=[{"role": "user", "content": prompt}]
     )
@@ -150,19 +152,12 @@ def score_post(post, first_line):
 
 # --- 実行メイン処理 ---
 recent_data = get_recent_data()
-
-# 被り防止ロジック（投稿形式）
 available_patterns = [p for p in PATTERNS if p not in recent_data["patterns"]]
 pattern = random.choice(available_patterns if available_patterns else PATTERNS)
-
-# 被り防止ロジック（冒頭パターン）
 available_openings = [o for o in OPENING_PATTERNS if o not in recent_data["openings"]]
 opening_pattern = random.choice(available_openings if available_openings else OPENING_PATTERNS)
-
-# 1行目とトピック
 first_line, topic = random.choice(FIRST_LINE_TOPIC_PAIRS)
 
-# 過去ログ読み込み
 past_posts = []
 try:
     with open('posts.json', 'r', encoding='utf-8') as f:
@@ -178,42 +173,29 @@ final_score = 0
 for attempt in range(max_attempts):
     print(f"生成試行 {attempt + 1}/{max_attempts}")
     post = generate_post(pattern, opening_pattern, first_line, topic, past_posts)
-    
-    # 基本クリーニング
     post = post.replace("**", "").replace("＃", "#")
     post = post.replace("!", "！").replace("?", "？")
 
-    # 1行目強制固定
     lines = post.strip().split('\n')
     if lines:
         lines[0] = first_line
     
-    # ハッシュタグ修正 & 空行調整
     fixed_lines = []
     for line in lines:
         clean_line = line.strip()
         if not clean_line:
             fixed_lines.append("")
             continue
-            
         if "#" in clean_line:
-            # ハッシュタグ行の整形（先頭の#を保証）
             words = clean_line.split()
-            new_words = []
-            for w in words:
-                if w.startswith('#'):
-                    new_words.append(w)
-                else:
-                    new_words.append('#' + w)
+            new_words = [w if w.startswith('#') else '#' + w for w in words if w]
             fixed_lines.append(' '.join(new_words))
         else:
             fixed_lines.append(line)
-            
     post = '\n'.join(fixed_lines)
 
     score = score_post(post, first_line)
     print(f"スコア: {score}")
-    
     if score >= 7.0:
         final_post = post
         final_score = score
@@ -222,7 +204,6 @@ for attempt in range(max_attempts):
         final_post = post
         final_score = score
 
-# 保存処理
 posts_data = []
 try:
     with open('posts.json', 'r', encoding='utf-8') as f:
@@ -239,7 +220,6 @@ posts_data.append({
     "posted": False
 })
 
-# 2週間保存
 two_weeks_ago = datetime.now() - timedelta(days=14)
 posts_data = [p for p in posts_data if datetime.fromisoformat(p["created_at"]) > two_weeks_ago]
 
