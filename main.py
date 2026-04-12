@@ -3,16 +3,15 @@ import subprocess
 import sys
 
 def run(script):
-    # スクリプトが存在するかチェック
     if not os.path.exists(script):
         print(f"警告：{script} が見つかりません。スキップします。")
-        return True # 存在しないだけなら続行、または必要に応じてFalseに
+        return True
 
     print(f"\n▶ {script} を実行中...")
     result = subprocess.run(
         [sys.executable, script],
         capture_output=True,
-        text=True, # encoding='utf-8' の代わりにより一般的な書き方
+        text=True,
         errors='replace'
     )
     
@@ -28,14 +27,13 @@ def run(script):
 
 print("=== 自動投稿システム開始 ===")
 
-# 順番に実行し、一つでも失敗（False）ならそこで終了する
 scripts = [
     "supervisor.py",
     "researcher.py",
+    "fetcher.py",
+    "analyst.py",
     "writer.py",
-    "poster.py",
-    "analyzer.py",    # 分析も自動化に含める場合
-    "get_metrics.py"  # メトリクス取得も自動化に含める場合
+    "poster.py"
 ]
 
 for script in scripts:
