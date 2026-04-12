@@ -5,11 +5,10 @@ import random
 import sys
 from datetime import datetime, timedelta
 
-# --- ここから修正：.env読み込みをシークレット対応に変更 ---
+# --- APIキー・シークレット対応 ---
 api_key = os.environ.get('CLAUDE_API_KEY')
 
 if not api_key:
-    # ローカル（自分のPC）で動かす時のための予備
     try:
         with open('.env') as f:
             for line in f:
@@ -18,7 +17,6 @@ if not api_key:
                     os.environ[key] = value
         api_key = os.environ.get('CLAUDE_API_KEY')
     except FileNotFoundError:
-        # GitHub Actions上ではここを通ります（.envがなくてもエラーにしない）
         pass
 
 if not api_key:
@@ -26,27 +24,16 @@ if not api_key:
     sys.exit(1)
 
 client = anthropic.Anthropic(api_key=api_key)
-# --- ここまで修正 ---
 
+# --- 定数定義 ---
 PATTERNS = [
-    "短文完結・暴露系",
-    "短文完結・需要確認型",
-    "短文完結・共感型",
-    "リスト系・チェックリスト型",
-    "リスト系・ランキング型",
-    "リスト系・比較型",
-    "コメント誘導型・質問型",
-    "コメント誘導型・共感募集型",
-    "コメント誘導型・投票型",
-    "ツリー展開型・続きが気になる型",
-    "ツリー展開型・段階解説型",
-    "暴露系・業界の裏側型",
-    "暴露系・失敗談型",
-    "需要確認型・あるある型",
-    "需要確認型・悩み提起型",
+    "短文完結・暴露系", "短文完結・需要確認型", "短文完結・共感型",
+    "リスト系・チェックリスト型", "リスト系・ランキング型", "リスト系・比較型",
+    "コメント誘導型・質問型", "コメント誘導型・共感募集型", "コメント誘導型・投票型",
+    "ツリー展開型・続きが気になる型", "ツリー展開型・段階解説型",
+    "暴露系・業界の裏側型", "暴露系・失敗談型", "需要確認型・あるある型", "需要確認型・悩み提起型",
 ]
 
-# 冒頭パターン10種類
 OPENING_PATTERNS = [
     "自己紹介系（属性を語りターゲットに共感を生む）",
     "数字を入れる系（納得感と期待感を高める）",
@@ -83,18 +70,23 @@ FIRST_LINE_TOPIC_PAIRS = [
     ("『 これ言ってる職場、逃げてOK 』", "職場にいる要注意人物の特徴と対処法。高圧的な人・フレネミー・お局など1つ取り上げる"),
 ]
 
-def get_recent_patterns():
+# --- 履歴取得関数 ---
+def get_recent_data():
     try:
         with open('posts.json', 'r', encoding='utf-8') as f:
             posts = json.load(f)
             recent = posts[-3:]
-            return [p.get("pattern", "") for p in recent]
+            return {
+                "patterns": [p.get("pattern", "") for p in recent],
+                "openings": [p.get("opening_pattern", "") for p in recent]
+            }
     except:
-        return []
+        return {"patterns": [], "openings": []}
 
 def is_list_pattern(pattern):
     return "リスト系" in pattern
 
+# --- 生成関数 ---
 def generate_post(pattern, opening_pattern, first_line, topic, past_posts):
     past_text = ""
     if past_posts:
@@ -105,8 +97,11 @@ def generate_post(pattern, opening_pattern, first_line, topic, past_posts):
     list_rule = ""
     if is_list_pattern(pattern):
         list_rule = "- リスト形式の場合、各項目は✅で始めること\n"
-        list_rule += "- リストを全部出力したあとに、各項目の説明を「・〇〇 → 説明文」の形式で追記すること\n"
-        list_rule += "- 投稿は必ず300文字以内に収めること\n"
+        list_rule += "- リストを全部出力したあとに、各項目の説明を以下の形式で書くこと\n"
+        list_rule += "  ・〇〇→ \n"
+        list_rule += "  説明文（適宜改行を入れて読みやすくする）\n"
+        list_rule += "- 説明文の前には必ず改行を入れること（・〇〇のすぐ横に書かない）\n"
+        list_rule += "- 投稿は必ず250文字以内に収めること\n"
     else:
         list_rule = "- 200文字以内\n"
 
@@ -121,60 +116,53 @@ def generate_post(pattern, opening_pattern, first_line, topic, past_posts):
     prompt += "- HSPや繊細さんが共感できる内容\n"
     prompt += "- 具体的で実用的な内容\n"
     prompt += "- 読みやすい改行\n"
-    prompt += "- 語尾の連続がないか確認すること（例：〜です。〜です。〜です。はNG）\n"
-    prompt += "- 主語と述語のねじれがないか確認すること\n"
-    prompt += "- 専門用語を多用しないこと\n"
-    prompt += "- 最後にハッシュタグを必ず3つ、全て#から始める（例：#HSP #繊細さん #転職）\n"
-    prompt += "- ハッシュタグは必ず#記号をつけること。#が抜けたタグは絶対に書かない\n"
-    prompt += "- *や**のような記号は絶対に使わない\n"
-    prompt += "- マークダウン記法は一切使わない\n"
-    prompt += "- 面接で発言する系の内容は絶対に入れない\n"
-    prompt += "- 自然な日本語でAIっぽくない表現にする\n"
-    prompt += "- !や?は全角（！や？）を使う\n"
-    prompt += "- 🍀などの四つ葉クローバーの絵文字は絶対に使わない\n"
-    prompt += "- 過去の投稿と内容が被らないようにする\n"
-    prompt += "- チェックリスト形式の場合、実際に求人票・口コミサイト・会社HPで確認できる項目のみにする\n"
+    prompt += "- 語尾の連続がないか確認すること\n"
+    prompt += "- 最後にハッシュタグを必ず3つ、全て#から始めること\n"
+    prompt += "- *や**のようなマークダウン記法は絶対に使わない\n"
+    prompt += "- 自然な日本語でAIっぽくない表現にする（！や？は全角）\n"
+    prompt += "- 🍀などの絵文字は使わない\n"
     prompt += past_text + "\n"
     prompt += "投稿文だけを出力してください。"
 
     message = client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-3-5-sonnet-20240620",
         max_tokens=2048,
         messages=[{"role": "user", "content": prompt}]
     )
     return message.content[0].text
 
 def score_post(post, first_line):
-    prompt = "以下のThreads投稿を10項目で採点してください。\n\n"
-    prompt += "1行目：" + first_line + "\n"
-    prompt += "投稿文：\n" + post + "\n\n"
-    prompt += "採点項目（各10点満点）：\n"
-    prompt += "1. フックの強さ（1行目で引きつけられるか）\n"
-    prompt += "2. 有益性（読んで役に立つか）\n"
-    prompt += "3. 具体性（具体的な内容か）\n"
-    prompt += "4. テンポ感（読みやすいか）\n"
-    prompt += "5. ペルソナ一致度（HSP・繊細さんに刺さるか）\n"
-    prompt += "6. 共感度（共感できるか）\n"
-    prompt += "7. 独自性（ありきたりでないか）\n"
-    prompt += "8. 自然さ（AIっぽくないか）\n"
-    prompt += "9. 行動喚起（いいねやコメントしたくなるか）\n"
-    prompt += "10. 1行目と内容の一致度（タイトルと本文が合っているか）\n\n"
-    prompt += "合計点と平均点だけを以下の形式で出力してください。\n"
-    prompt += "平均点:X.X"
-
+    prompt = f"以下のThreads投稿を採点してください。\n\n1行目：{first_line}\n投稿文：\n{post}\n\n平均点:X.X の形式で出力してください。"
     message = client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-3-5-sonnet-20240620",
         max_tokens=100,
         messages=[{"role": "user", "content": prompt}]
     )
-    result = message.content[0].text
     try:
-        score = float(result.split("平均点:")[1].strip())
+        score_str = message.content[0].text
+        if "平均点:" in score_str:
+            score = float(score_str.split("平均点:")[1].split()[0].strip())
+        else:
+            score = 7.0
     except:
         score = 7.0
     return score
 
-# 過去の投稿を読み込む
+# --- 実行メイン処理 ---
+recent_data = get_recent_data()
+
+# 被り防止ロジック（投稿形式）
+available_patterns = [p for p in PATTERNS if p not in recent_data["patterns"]]
+pattern = random.choice(available_patterns if available_patterns else PATTERNS)
+
+# 被り防止ロジック（冒頭パターン）
+available_openings = [o for o in OPENING_PATTERNS if o not in recent_data["openings"]]
+opening_pattern = random.choice(available_openings if available_openings else OPENING_PATTERNS)
+
+# 1行目とトピック
+first_line, topic = random.choice(FIRST_LINE_TOPIC_PAIRS)
+
+# 過去ログ読み込み
 past_posts = []
 try:
     with open('posts.json', 'r', encoding='utf-8') as f:
@@ -183,73 +171,58 @@ try:
 except:
     pass
 
-# パターン・冒頭パターン・1行目・トピックを選択
-recent_patterns = get_recent_patterns()
-available_patterns = [p for p in PATTERNS if p not in recent_patterns]
-if not available_patterns:
-    available_patterns = PATTERNS
-pattern = random.choice(available_patterns)
-opening_pattern = random.choice(OPENING_PATTERNS)
-first_line, topic = random.choice(FIRST_LINE_TOPIC_PAIRS)
-
-print("今回のパターン：" + pattern)
-print("今回の冒頭パターン：" + opening_pattern[:20] + "...")
-print("今回の1行目：" + first_line)
-print("今回のトピック：" + topic[:30] + "...")
-
-# 投稿生成ループ（最大3回試行）
 max_attempts = 3
 final_post = None
 final_score = 0
 
 for attempt in range(max_attempts):
-    print(f"\n生成試行 {attempt + 1}/{max_attempts}")
+    print(f"生成試行 {attempt + 1}/{max_attempts}")
     post = generate_post(pattern, opening_pattern, first_line, topic, past_posts)
-    post = post.replace("**", "")
+    
+    # 基本クリーニング
+    post = post.replace("**", "").replace("＃", "#")
     post = post.replace("!", "！").replace("?", "？")
 
-    # 1行目を強制的に置き換え
+    # 1行目強制固定
     lines = post.strip().split('\n')
-    lines[0] = first_line
-    post = '\n'.join(lines)
-
-    # ハッシュタグの#抜けを修正
-    lines = post.strip().split('\n')
+    if lines:
+        lines[0] = first_line
+    
+    # ハッシュタグ修正 & 空行調整
     fixed_lines = []
     for line in lines:
-        if line.strip() and not line.startswith('#') and not line.startswith('『'):
-            words = line.split()
-            if any(w.startswith('#') for w in words):
-                fixed_words = []
-                for w in words:
-                    if not w.startswith('#') and len(w) > 1:
-                        w = '#' + w
-                    fixed_words.append(w)
-                line = ' '.join(fixed_words)
-        fixed_lines.append(line)
+        clean_line = line.strip()
+        if not clean_line:
+            fixed_lines.append("")
+            continue
+            
+        if "#" in clean_line:
+            # ハッシュタグ行の整形（先頭の#を保証）
+            words = clean_line.split()
+            new_words = []
+            for w in words:
+                if w.startswith('#'):
+                    new_words.append(w)
+                else:
+                    new_words.append('#' + w)
+            fixed_lines.append(' '.join(new_words))
+        else:
+            fixed_lines.append(line)
+            
     post = '\n'.join(fixed_lines)
 
-    # 自己採点
-    print("採点中...")
     score = score_post(post, first_line)
-    print(f"スコア：{score}/10")
-
+    print(f"スコア: {score}")
+    
     if score >= 7.0:
-        print("合格！投稿をキューに追加します。")
         final_post = post
         final_score = score
         break
-    elif attempt < max_attempts - 1:
-        print(f"スコアが低いため書き直します。（{score}/10）")
-    else:
-        print("3回試行しましたが基準に達しませんでした。今回は棄却します。")
-        sys.exit(0)
+    elif attempt == max_attempts - 1:
+        final_post = post
+        final_score = score
 
-print("\n生成された投稿：")
-# 文字化け対策（Actionsログ用）
-print(final_post)
-
-# 保存処理（2週間以上前のデータを削除するロジックを追加）
+# 保存処理
 posts_data = []
 try:
     with open('posts.json', 'r', encoding='utf-8') as f:
@@ -257,7 +230,6 @@ try:
 except:
     pass
 
-# 新しい投稿を追加
 posts_data.append({
     "text": final_post,
     "pattern": pattern,
@@ -267,16 +239,12 @@ posts_data.append({
     "posted": False
 })
 
-# 現在から14日（2週間）前の日時を取得
+# 2週間保存
 two_weeks_ago = datetime.now() - timedelta(days=14)
-
-# 2週間以内のデータのみを抽出してリストを更新
-posts_data = [
-    p for p in posts_data 
-    if datetime.fromisoformat(p["created_at"]) > two_weeks_ago
-]
+posts_data = [p for p in posts_data if datetime.fromisoformat(p["created_at"]) > two_weeks_ago]
 
 with open('posts.json', 'w', encoding='utf-8') as f:
     json.dump(posts_data, f, ensure_ascii=False, indent=2)
 
-print("2週間以上前のデータを整理し、posts.jsonに保存しました！")
+print("\n=== 生成完了 ===")
+print(final_post)
