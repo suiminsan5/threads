@@ -25,106 +25,67 @@ if not api_key:
 
 client = anthropic.Anthropic(api_key=api_key)
 
-# モデル名を指定通りに固定
+# モデル名を固定
 MODEL_NAME = "claude-sonnet-4-6"
 
 # --- 定数定義 ---
-PATTERNS = [
-    "短文完結・暴露系", "短文完結・需要確認型", "短文完結・共感型",
-    "リスト系・チェックリスト型", "リスト系・ランキング型", "リスト系・比較型",
-    "コメント誘導型・質問型", "コメント誘導型・共感募集型", "コメント誘導型・投票型",
-    "ツリー展開型・段階解説型", # ツリー展開型でも1投稿完結を促す
-    "暴露系・業界の裏側型", "暴露系・失敗談型", "需要確認型・あるある型", "需要確認型・悩み提起型",
-]
-
-OPENING_PATTERNS = [
-    "自己紹介系（属性を語りターゲットに共感を生む）",
-    "数字を入れる系（納得感と期待感を高める）",
-    "続きが気になる系（「ここだけの話」などで好奇心を刺激する）",
-    "専門性アピール系（誰が言っているかなど信憑性を高める）",
-    "限定公開系（緊急性を演出して保存を促す）",
-    "逆張り系（常識の逆を行き目を引く）",
-    "面白悪口系（自虐やあるあるで親近感を持たせる）",
-    "トレンド系（季節のイベントや話題に絡める）",
-    "あるある系（強い共感でフォローを増やす）",
-    "断言系（緊急性や重要性を強調する）",
+# noteの知見に基づいた「フック」のパターン
+HOOK_STRATEGIES = [
+    "共感・悩み型（読者の「これ私だ」を突く）",
+    "ベネフィット型（数字や得られる未来を見せる）",
+    "常識否定型（当たり前を疑わせて足を止める）",
+    "ストーリー型（ビフォーアフターで期待させる）",
+    "権威性・希少性型（損をしたくない心理を突く）",
+    "結論・要約型（タイパ重視層に刺す）"
 ]
 
 FIRST_LINE_TOPIC_PAIRS = [
-    ("『 繊細さんに告白します 』", "繊細さん（HSP）の仕事・転職・メンタルに関する内容で自由に作成"),
-    ("『 HSPの人だけ読んでほしい 』", "繊細さん（HSP）の仕事・転職・メンタルに関する内容で自由に作成"),
-    ("『 これ知らないと損する 』", "繊細さん（HSP）への転職アドバイス（面接に関する内容は絶対に含めない）"),
-    ("『 繊細さんが転職で失敗する理由、わかった 』", "繊細さん（HSP）への転職アドバイス（面接に関する内容は絶対に含めない）"),
-    ("『 正直に言います 』", "繊細さん（HSP）の仕事・転職・メンタルに関する内容で自由に作成"),
-    ("『 繊細さんあるある、言っていい？ 』", "繊細さん（HSP）の仕事・転職・メンタルに関する内容で自由に作成"),
-    ("『 職場でこれやってる人、要注意 』", "職場にいる要注意人物の特徴と対処法。高圧的な人・フレネミー・お局など1つ取り上げる"),
-    ("『 転職前に絶対確認してほしいこと 』", "繊細さん（HSP）が転職するとき重視したほうがいいこと。チェック項目形式で書く"),
-    ("『 繊細さんが疲れる本当の理由 』", "繊細さん（HSP）の体力温存方法。日常で使える具体的な方法を1つ取り上げて書く"),
-    ("『 これ共感する人いる？ 』", "繊細さん（HSP）の仕事・転職・メンタルに関する内容で自由に作成"),
-    ("『 繊細さんに向いてる職場の特徴 』", "繊細さん（HSP）が転職するとき重視したほうがいいこと。チェック項目形式で書く"),
-    ("『 HSPが絶対避けるべき職場の特徴 』", "繊細さん（HSP）が転職するとき重視したほうがいいこと。チェック項目形式で書く"),
-    ("『 繊細さんの体力温存術、教えます 』", "繊細さん（HSP）の体力温存方法。日常で使える具体的な方法を1つ取り上げて書く"),
-    ("『 メンタルが限界のとき、試してほしいこと 』", "繊細さん（HSP）のメンタル回復方法。弱ったときに使える具体的な方法を1つ書く"),
-    ("『 繊細さんが仕事で消耗しやすい場面 』", "繊細さん（HSP）の体力温存方法。日常で使える具体的な方法を1つ取り上げて書く"),
-    ("『 転職エージェントが言わないこと 』", "繊細さん（HSP）への転職アドバイス（面接に関する内容は絶対に含めない）"),
-    ("『 職場のあの人、こう対処してます 』", "職場にいる要注意人物の特徴と対処法。高圧的な人・フレネミー・お局など1つ取り上げる"),
-    ("『 繊細さんが自分を守る方法 』", "繊細さん（HSP）の体力温存方法。日常で使える具体的な方法を1つ取り上げて書く"),
-    ("『 HSPが転職で重視すべきこと 』", "繊細さん（HSP）が転職するとき重視したほうがいいこと。チェック項目形式で書く"),
-    ("『 これ言ってる職場、逃げてOK 』", "職場にいる要注意人物の特徴と対処法。高圧的な人・フレネミー・お局など1つ取り上げる"),
+    ("繊細さんに告白します。", "繊細さん（HSP）の仕事・転職・メンタルに関する内容で自由に作成"),
+    ("正直に言います。", "繊細さん（HSP）の仕事・転職・メンタルに関する内容で自由に作成"),
+    ("繊細さんあるある、言っていい？", "繊細さん（HSP）の仕事・転職・メンタルに関するあるあるの内容で自由に作成"),
+    ("これ知らないと損する！", "繊細さん（HSP）のため就活アドバイス（面接に関する内容は絶対に含めない）"),
+    ("転職前に絶対確認してほしいこと。", "繊細さん（HSP）が転職するとき確認したほうがいいこと。チェック項目形式で書く"),
+    ("繊細さんが疲れる本当の理由", "繊細さん（HSP）の悩み。日常で疲れる具体的な原因を1つ取り上げて書く"),
+    ("これ共感する人いる？", "繊細さん（HSP）が共感しそうな仕事・転職・メンタルに関する内容で自由に作成"),
+    ("【 繊細さんに向いてる職場の特徴 】", "繊細さんに向いてる職場の特徴。チェック項目形式で書く"),
+    ("【 HSPが絶対避けるべき職場の特徴 】", "繊細さん（HSP）が転職するとき避けるべき職場の特徴。チェック項目形式で書く"),
+    ("メンタルが限界のとき、試してほしいこと", "繊繊細さん（HSP）のメンタル回復方法。弱ったときに使える具体的な方法を1つ書く"),
+    ("【 繊細さんが仕事で消耗しやすい場面 】", "繊細さん（HSP）の消耗しやすい場面での悩み。具体的な場面を1つ取り上げて書く"),
+    ("転職エージェントが言わないこと", "転職エージェントが言わないことを暴露"),
+    ("【 繊細さんが自分を守る方法 】", "繊細さん（HSP）の具体的な防衛術。具体的な方法を1つ書く"),
+    ("【 HSPが転職で重視すべきこと 】", "繊細さん（HSP）が転職するとき重視したほうがいいこと。チェック項目形式で書く"),
+    ("こんな人がいる職場、逃げて。", "職場にいる要注意人物の特徴と対処法。高圧的な人・フレネミー・お局・不衛生な人など1つ取り上げる"),
 ]
 
-def get_recent_data():
-    try:
-        with open('posts.json', 'r', encoding='utf-8') as f:
-            posts = json.load(f)
-            recent = posts[-3:]
-            return {
-                "patterns": [p.get("pattern", "") for p in recent],
-                "openings": [p.get("opening_pattern", "") for p in recent]
-            }
-    except:
-        return {"patterns": [], "openings": []}
+def generate_thread_post(hook_strategy, first_line, topic):
+    prompt = f"""以下の条件でThreadsのスレッド投稿文（2投稿セット）を作成してください。
 
-def is_list_pattern(pattern):
-    return "リスト系" in pattern
+【戦略】noteの知見に基づいた以下のフック戦略を使用：{hook_strategy}
+【1行目】必ずこの書き出しで始める：{first_line}
+【トピック】{topic}
 
-def generate_post(pattern, opening_pattern, first_line, topic, past_posts):
-    past_text = ""
-    if past_posts:
-        past_text = "\n\n過去の投稿（これらと似た内容にしないこと）:\n"
-        for i, p in enumerate(past_posts):
-            past_text += f"\n--- 過去{i+1} ---\n{p}\n"
+条件：
+1. 全体を2つの投稿（親投稿と、その返信投稿）に分けること。
+2. 親投稿（1つ目）のルール：
+    - 1行目は指定された通りに始める。
+    - noteのテクニックを使い、最初の2〜3行で強烈に興味を引くこと。
+    - 核心に触れる直前で「その具体的な方法は、」「やり方を解説すると、」 「実は、」のように、続きが気になる形で文章を終わらせること。
+    - 100文字以内。
+3. 返信投稿（2つ目）のルール：
+    - 親投稿から続く解説や解決策を具体的に書く。
+    - 最後にハッシュタグを3つ（#から始める）つける。
+    - 200文字以内。
+4. 共通ルール：
+    - 絵文字は ✅ 以外使わない。
+    - 読みやすい改行を入れる。
+    - 自然な日本語で、AIっぽくない表現にする。
+    - (1/2) や (2/2) といった番号は一切含めないこと。
 
-    list_rule = ""
-    if is_list_pattern(pattern):
-        list_rule = "- リスト形式の場合、各項目は必ず ✅ で始めること（☐などの記号は絶対に使わない）\n"
-        list_rule += "- リストを全部出力したあとに、各項目の説明を以下の形式で書くこと\n"
-        list_rule += "  ・〇〇→ \n"
-        list_rule += "  説明文（適宜改行を入れて読みやすくする）\n"
-        list_rule += "- 説明文の前には必ず改行を入れること（・〇〇のすぐ横に書かない）\n"
-        list_rule += "- 投稿は必ず250文字以内に収めること\n"
-    else:
-        list_rule = "- 200文字以内\n"
-
-    prompt = "以下の条件でThreadsの投稿文を1つ作成してください。\n\n"
-    prompt += "【投稿パターン】" + pattern + "\n"
-    prompt += "【冒頭パターン】" + opening_pattern + "\n"
-    prompt += "【1行目】必ず以下の書き出しで始めること：" + first_line + "\n"
-    prompt += "【トピック】" + topic + "\n"
-    prompt += "【重要】1行目のタイトルと投稿内容を必ず一致させること\n\n"
-    prompt += "条件：\n"
-    prompt += list_rule
-    prompt += "- **【重要】必ず1つの投稿で内容を完結させること。**\n"
-    prompt += "- 「続きは次のスレで」「続きはリプ欄」「(1/2)」といった、次があることを示唆する表現は一切禁止です。\n"
-    prompt += "- HSPや繊細さんが共感できる、具体的で実用的な内容\n"
-    prompt += "- 「面接で非現実的な事を聞く」「怒号があるか聞く」といった、現実的に不可能なことや、応募者の印象を下げるNG提案は絶対にしないこと\n"
-    prompt += "- 読みやすい改行。語尾の連続を避けること\n"
-    prompt += "- 最後にハッシュタグを必ず3つ、全て#から始めること\n"
-    prompt += "- *や**のようなマークダウン記法は絶対に使わない\n"
-    prompt += "- 自然な日本語でAIっぽくない表現にする\n"
-    prompt += "- ✅ 以外の絵文字は使わない\n"
-    prompt += past_text + "\n"
-    prompt += "投稿文だけを出力してください。"
+出力形式：
+---parent---
+（親投稿の本文）
+---reply---
+（返信投稿の本文）"""
 
     message = client.messages.create(
         model=MODEL_NAME,
@@ -133,77 +94,26 @@ def generate_post(pattern, opening_pattern, first_line, topic, past_posts):
     )
     return message.content[0].text
 
-def score_post(post, first_line):
-    prompt = f"以下のThreads投稿を採点してください。\n\n1行目：{first_line}\n投稿文：\n{post}\n\n平均点:X.X の形式で出力してください。"
-    message = client.messages.create(
-        model=MODEL_NAME,
-        max_tokens=100,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    try:
-        score_str = message.content[0].text
-        if "平均点:" in score_str:
-            score = float(score_str.split("平均点:")[1].split()[0].strip())
-        else:
-            score = 7.0
-    except:
-        score = 7.0
-    return score
-
-# --- 実行メイン処理 ---
-recent_data = get_recent_data()
-available_patterns = [p for p in PATTERNS if p not in recent_data["patterns"]]
-pattern = random.choice(available_patterns if available_patterns else PATTERNS)
-available_openings = [o for o in OPENING_PATTERNS if o not in recent_data["openings"]]
-opening_pattern = random.choice(available_openings if available_openings else OPENING_PATTERNS)
+# --- メイン処理 ---
+hook_strategy = random.choice(HOOK_STRATEGIES)
 first_line, topic = random.choice(FIRST_LINE_TOPIC_PAIRS)
 
-past_posts = []
+print(f"戦略: {hook_strategy}")
+print(f"生成中...")
+
+raw_output = generate_thread_post(hook_strategy, first_line, topic)
+
+# 文字の微調整
+raw_output = raw_output.replace("**", "").replace("＃", "#").replace("!", "！").replace("?", "？")
+
 try:
-    with open('posts.json', 'r', encoding='utf-8') as f:
-        posts = json.load(f)
-        past_posts = [p["text"] for p in posts[-10:]]
+    parent_text = raw_output.split("---parent---")[1].split("---reply---")[0].strip()
+    reply_text = raw_output.split("---reply---")[1].strip()
 except:
-    pass
+    print("生成フォーマットに失敗しました。")
+    sys.exit(1)
 
-max_attempts = 3
-final_post = None
-final_score = 0
-
-for attempt in range(max_attempts):
-    print(f"生成試行 {attempt + 1}/{max_attempts}")
-    post = generate_post(pattern, opening_pattern, first_line, topic, past_posts)
-    post = post.replace("**", "").replace("＃", "#")
-    post = post.replace("!", "！").replace("?", "？")
-
-    lines = post.strip().split('\n')
-    if lines:
-        lines[0] = first_line
-    
-    fixed_lines = []
-    for line in lines:
-        clean_line = line.strip()
-        if not clean_line:
-            fixed_lines.append("")
-            continue
-        if "#" in clean_line:
-            words = clean_line.split()
-            new_words = [w if w.startswith('#') else '#' + w for w in words if w]
-            fixed_lines.append(' '.join(new_words))
-        else:
-            fixed_lines.append(line)
-    post = '\n'.join(fixed_lines)
-
-    score = score_post(post, first_line)
-    print(f"スコア: {score}")
-    if score >= 7.0:
-        final_post = post
-        final_score = score
-        break
-    elif attempt == max_attempts - 1:
-        final_post = post
-        final_score = score
-
+# 保存
 posts_data = []
 try:
     with open('posts.json', 'r', encoding='utf-8') as f:
@@ -212,19 +122,16 @@ except:
     pass
 
 posts_data.append({
-    "text": final_post,
-    "pattern": pattern,
-    "opening_pattern": opening_pattern,
-    "score": final_score,
+    "parent_text": parent_text,
+    "reply_text": reply_text,
+    "hook_strategy": hook_strategy,
     "created_at": datetime.now().isoformat(),
     "posted": False
 })
-
-two_weeks_ago = datetime.now() - timedelta(days=14)
-posts_data = [p for p in posts_data if datetime.fromisoformat(p["created_at"]) > two_weeks_ago]
 
 with open('posts.json', 'w', encoding='utf-8') as f:
     json.dump(posts_data, f, ensure_ascii=False, indent=2)
 
 print("\n=== 生成完了 ===")
-print(final_post)
+print(f"【親投稿】\n{parent_text}")
+print(f"\n【返信投稿】\n{reply_text}")
